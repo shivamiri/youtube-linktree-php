@@ -12,7 +12,17 @@ A free, mobile-first Linktree-style bio link page for YouTube creators, built wi
 
 ## Screenshots
 
-Screenshots live in `docs/screenshots/` (public page, admin dashboard, settings). They will be added after the next deploy.
+**Public page**
+
+<img src="docs/screenshots/public.png" alt="Public link page" width="320">
+
+**Admin dashboard**
+
+<img src="docs/screenshots/dashboard.png" alt="Admin dashboard" width="420">
+
+**Settings**
+
+<img src="docs/screenshots/settings.png" alt="Admin settings" width="420">
 
 ---
 
