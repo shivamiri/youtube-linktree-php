@@ -4,7 +4,7 @@ Step-by-step install on free shared hosting (InfinityFree example). Any hosting 
 
 ## What you need
 
-- A hosting account with PHP 8+ and one MySQL database (InfinityFree free plan works)
+- A hosting account with PHP 8+ and one MySQL database (the InfinityFree free plan works)
 - This repository's files
 - 10 minutes
 
@@ -33,20 +33,20 @@ Step-by-step install on free shared hosting (InfinityFree example). Any hosting 
 3. Upload ALL files and folders from this repo:
    - `index.php`
    - `common/` (header.php, bottom.php)
-   - `admin/` (poora folder)
+   - `admin/` (the whole folder)
    - `upload/` (with its `.htaccess`)
-4. Do NOT upload: `README.md`, `LICENSE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/`, `.github/`, `.gitignore`, `database.sql` (ye sirf repo ke liye hain). Unka koi nuksan nahi, bas zaroori nahi.
+4. Do NOT upload: `README.md`, `LICENSE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/`, `.github/`, `.gitignore`, `database.sql` (these are only for the repo). They cause no harm, they are just not needed.
 
 ## Step 4: Create config.php
 
 1. In `htdocs/common/`, make a copy of `config.sample.php` and rename it to `config.php`.
-   (Ya: config.sample.php ko edit karke "Save As" config.php.)
+   (Or: edit `config.sample.php` and use "Save As" `config.php`.)
 2. Open `config.php` and fill in your Step 1 database details:
    - `DB_HOST` = MySQL Host Name
    - `DB_USER` = MySQL User Name
    - `DB_PASS` = MySQL Password
    - `DB_NAME` = MySQL Database Name
-3. Optional: `GA_MEASUREMENT_ID` me apni Google Analytics 4 ID daalein, ya khali chhod dein.
+3. Optional: put your Google Analytics 4 ID in `GA_MEASUREMENT_ID`, or leave it empty.
 4. Save.
 
 **Never upload this `config.php` to GitHub.** It has your database password.
