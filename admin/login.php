@@ -9,45 +9,66 @@ if (is_admin_logged_in()) {
 
 $error = '';
 
+// Brute-force protection: initialize session counters
+if (!isset($_SESSION['login_attempts'])) {
+    $_SESSION['login_attempts'] = 0;
+    $_SESSION['last_attempt_time'] = time();
+}
+
 // Handle Login Form Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = sanitize($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    if (empty($username) || empty($password)) {
-        $error = "Please enter both username and password.";
+    // 1. CSRF Verification
+    if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
+        $error = "Invalid security token. Please refresh and try again.";
     } else {
-        // Use prepared statements to prevent SQL injection
-        $stmt = $conn->prepare("SELECT id, password FROM admin WHERE username = ? LIMIT 1");
-        if ($stmt) {
-            $stmt->bind_param("s", $username);
-            $stmt->execute();
-            $result = $stmt->get_result();
-
-            if ($result->num_rows === 1) {
-                $admin = $result->fetch_assoc();
-                
-                // Verify Password
-                if (password_verify($password, $admin['password'])) {
-                    // Regenerate session ID for security against session fixation
-                    session_regenerate_id(true);
-                    
-                    $_SESSION['admin_logged_in'] = true;
-                    $_SESSION['admin_id'] = $admin['id'];
-                    
-                    redirect('index.php');
-                } else {
-                    $error = "Invalid username or password.";
-                }
-            } else {
-                $error = "Invalid username or password.";
-            }
-            $stmt->close();
+        // 2. Brute-force check (5 attempts = 5 mins lockout)
+        $time_since_last = time() - $_SESSION['last_attempt_time'];
+        if ($_SESSION['login_attempts'] >= 5 && $time_since_last < 300) {
+            $error = "Too many failed attempts. Please try again after 5 minutes.";
         } else {
-            $error = "System error occurred. Please try again later.";
+            $username = sanitize($_POST['username'] ?? '');
+            $password = $_POST['password'] ?? '';
+
+            if (empty($username) || empty($password)) {
+                $error = "Please enter both username and password.";
+            } else {
+                $stmt = $conn->prepare("SELECT id, password FROM admin WHERE username = ? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param("s", $username);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+
+                    if ($result->num_rows === 1) {
+                        $admin = $result->fetch_assoc();
+                        
+                        // Verify Password
+                        if (password_verify($password, $admin['password'])) {
+                            $_SESSION['login_attempts'] = 0; // Reset counter on success
+                            session_regenerate_id(true);
+                            $_SESSION['admin_logged_in'] = true;
+                            $_SESSION['admin_id'] = $admin['id'];
+                            
+                            redirect('index.php');
+                        } else {
+                            $_SESSION['login_attempts']++;
+                            $_SESSION['last_attempt_time'] = time();
+                            $error = "Invalid username or password.";
+                        }
+                    } else {
+                        $_SESSION['login_attempts']++;
+                        $_SESSION['last_attempt_time'] = time();
+                        $error = "Invalid username or password.";
+                    }
+                    $stmt->close();
+                } else {
+                    $error = "System error occurred. Please try again later.";
+                }
+            }
         }
     }
 }
+
+$csrf_token = generate_csrf_token();
 
 // Include Admin Header
 require_once __DIR__ . '/common/header.php';
@@ -71,7 +92,10 @@ require_once __DIR__ . '/common/header.php';
             </div>
         <?php endif; ?>
 
+        <!-- Form Enctype is default, avoiding InfinityFree multipart POST block -->
         <form method="POST" action="">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+            
             <div class="mb-5">
                 <label for="username" class="block text-sm font-medium text-gray-400 mb-2">Username</label>
                 <div class="relative">
