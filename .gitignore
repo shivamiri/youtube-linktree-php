@@ -1,0 +1,14 @@
+# Private config - NEVER commit real database credentials
+config.php
+common/config.php
+
+# Uploaded images - keep the folder and its .htaccess, ignore the content
+upload/*
+!upload/.htaccess
+
+# OS and editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.tmp
