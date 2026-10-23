@@ -29,7 +29,7 @@
             }
         }, { passive: false });
         
-        // Touchmove wala script yahan se hata diya gaya hai taki scrolling smooth rahe
+        // Touchmove handler removed to keep scrolling smooth
     </script>
 </body>
 </html>
