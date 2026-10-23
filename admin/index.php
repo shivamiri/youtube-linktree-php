@@ -8,90 +8,120 @@ if (!is_admin_logged_in()) {
 $msg = '';
 $msg_type = '';
 
-// Helper function for YouTube Title Auto-Fetch
+// Helper function for YouTube Title Auto-Fetch (Updated for both HTTP/HTTPS & Local Support)
 function fetch_youtube_title($video_id) {
-    $url = "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=" . $video_id . "&format=json";
-    $context = stream_context_create(['http' => ['ignore_errors' => true]]);
-    $response = @file_get_contents($url, false, $context);
-    if ($response) {
-        $data = json_decode($response, true);
-        if (isset($data['title'])) {
-            return $data['title'];
+    // Try HTTPS first
+    $urls = [
+        "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=" . $video_id . "&format=json",
+        "https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=" . $video_id . "&format=json"
+    ];
+    
+    foreach ($urls as $url) {
+        $response = '';
+        
+        // 1. Try cURL (with SSL verification disabled for local server compatibility)
+        if (function_exists('curl_version')) {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            $response = @curl_exec($ch);
+            curl_close($ch);
+        }
+        
+        // 2. Fallback to file_get_contents
+        if (empty($response) && ini_get('allow_url_fopen')) {
+            $context = stream_context_create([
+                'http' => ['ignore_errors' => true],
+                'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false]
+            ]);
+            $response = @file_get_contents($url, false, $context);
+        }
+
+        if ($response) {
+            $data = json_decode($response, true);
+            if (isset($data['title'])) {
+                return $data['title'];
+            }
         }
     }
     return false;
 }
 
-// --- HANDLE GET ACTIONS (DELETE) ---
-if (isset($_GET['delete_video'])) {
-    $del_id = intval($_GET['delete_video']);
-    $stmt = $conn->prepare("DELETE FROM videos WHERE id = ?");
-    $stmt->bind_param("i", $del_id);
-    if ($stmt->execute()) {
-        redirect('index.php?msg=deleted');
-    }
-    $stmt->close();
-}
-
 // --- HANDLE POST ACTIONS ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
-    // Add / Edit Video
-    if ($_POST['action'] === 'save_video') {
-        $video_id_pk = isset($_POST['video_id']) ? intval($_POST['video_id']) : 0;
-        $yt_url = sanitize($_POST['youtube_url']);
-        $title = sanitize($_POST['title']);
-        $thumb_type = sanitize($_POST['thumbnail_type']);
-        $thumb_url = sanitize($_POST['thumbnail_url']);
-        $display_order = intval($_POST['display_order']);
-        $status = sanitize($_POST['status']);
-        
-        $yt_id = get_youtube_id($yt_url);
-        if (!$yt_id) {
-            $msg = "Invalid YouTube URL.";
-            $msg_type = 'error';
-        } else {
-            // Auto Title
-            if (empty($title)) {
-                $auto_title = fetch_youtube_title($yt_id);
-                $title = $auto_title ? $auto_title : 'Untitled Video';
+    // CSRF Verification for all POST actions
+    if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
+        $msg = "Invalid security token. Please refresh and try again.";
+        $msg_type = 'error';
+    } else {
+        // Delete Video (Converted from GET to POST for security)
+        if ($_POST['action'] === 'delete_video') {
+            $del_id = intval($_POST['delete_id']);
+            $stmt = $conn->prepare("DELETE FROM videos WHERE id = ?");
+            $stmt->bind_param("i", $del_id);
+            if ($stmt->execute()) {
+                redirect('index.php?msg=deleted');
             }
+            $stmt->close();
+        }
 
-            // Thumbnail Upload Handling
-            $thumb_upload = '';
-            if ($video_id_pk > 0) {
-                // Fetch existing upload if editing
-                $st = $conn->query("SELECT thumbnail_upload FROM videos WHERE id = $video_id_pk");
-                if ($row = $st->fetch_assoc()) $thumb_upload = $row['thumbnail_upload'];
-            }
-
-            if ($thumb_type === 'upload' && isset($_FILES['thumbnail_file']) && $_FILES['thumbnail_file']['error'] === UPLOAD_ERR_OK) {
-                $upload_res = upload_image($_FILES['thumbnail_file']);
-                if ($upload_res['status']) {
-                    $thumb_upload = $upload_res['filename'];
-                } else {
-                    $msg = $upload_res['message'];
-                    $msg_type = 'error';
+        // Add / Edit Video
+        if ($_POST['action'] === 'save_video') {
+            $video_id_pk = isset($_POST['video_id']) ? intval($_POST['video_id']) : 0;
+            $yt_url = sanitize($_POST['youtube_url']);
+            $title = sanitize($_POST['title']);
+            $thumb_type = sanitize($_POST['thumbnail_type']);
+            $thumb_url = sanitize($_POST['thumbnail_url']);
+            $display_order = intval($_POST['display_order']);
+            $status = sanitize($_POST['status']);
+            
+            $yt_id = get_youtube_id($yt_url);
+            if (!$yt_id) {
+                $msg = "Invalid YouTube URL.";
+                $msg_type = 'error';
+            } else {
+                // Auto Title
+                if (empty($title)) {
+                    $auto_title = fetch_youtube_title($yt_id);
+                    $title = $auto_title ? $auto_title : 'Untitled Video';
                 }
-            }
 
-            if (empty($msg)) {
+                // Thumbnail Upload Handling
+                $thumb_upload = '';
                 if ($video_id_pk > 0) {
-                    // Update
-                    $stmt = $conn->prepare("UPDATE videos SET youtube_url=?, youtube_video_id=?, title=?, thumbnail_type=?, thumbnail_upload=?, thumbnail_url=?, display_order=?, status=? WHERE id=?");
-                    $stmt->bind_param("ssssssisi", $yt_url, $yt_id, $title, $thumb_type, $thumb_upload, $thumb_url, $display_order, $status, $video_id_pk);
-                } else {
-                    // Insert
-                    $stmt = $conn->prepare("INSERT INTO videos (youtube_url, youtube_video_id, title, thumbnail_type, thumbnail_upload, thumbnail_url, display_order, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->bind_param("ssssssis", $yt_url, $yt_id, $title, $thumb_type, $thumb_upload, $thumb_url, $display_order, $status);
+                    $st = $conn->query("SELECT thumbnail_upload FROM videos WHERE id = $video_id_pk");
+                    if ($row = $st->fetch_assoc()) $thumb_upload = $row['thumbnail_upload'];
                 }
-                if ($stmt->execute()) {
-                    redirect('index.php?msg=video_saved');
-                } else {
-                    $msg = "Database error while saving video.";
-                    $msg_type = 'error';
+
+                if ($thumb_type === 'upload' && isset($_FILES['thumbnail_file']) && $_FILES['thumbnail_file']['error'] === UPLOAD_ERR_OK) {
+                    $upload_res = upload_image($_FILES['thumbnail_file']);
+                    if ($upload_res['status']) {
+                        $thumb_upload = $upload_res['filename'];
+                    } else {
+                        $msg = $upload_res['message'];
+                        $msg_type = 'error';
+                    }
                 }
-                $stmt->close();
+
+                if (empty($msg)) {
+                    if ($video_id_pk > 0) {
+                        $stmt = $conn->prepare("UPDATE videos SET youtube_url=?, youtube_video_id=?, title=?, thumbnail_type=?, thumbnail_upload=?, thumbnail_url=?, display_order=?, status=? WHERE id=?");
+                        $stmt->bind_param("ssssssisi", $yt_url, $yt_id, $title, $thumb_type, $thumb_upload, $thumb_url, $display_order, $status, $video_id_pk);
+                    } else {
+                        $stmt = $conn->prepare("INSERT INTO videos (youtube_url, youtube_video_id, title, thumbnail_type, thumbnail_upload, thumbnail_url, display_order, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->bind_param("ssssssis", $yt_url, $yt_id, $title, $thumb_type, $thumb_upload, $thumb_url, $display_order, $status);
+                    }
+                    if ($stmt->execute()) {
+                        redirect('index.php?msg=video_saved');
+                    } else {
+                        $msg = "Database error while saving video.";
+                        $msg_type = 'error';
+                    }
+                    $stmt->close();
+                }
             }
         }
     }
@@ -120,6 +150,8 @@ if (isset($_GET['edit'])) {
     $edit_video = $st->get_result()->fetch_assoc();
     $st->close();
 }
+
+$csrf_token = generate_csrf_token();
 
 require_once __DIR__ . '/common/header.php';
 ?>
@@ -175,7 +207,8 @@ require_once __DIR__ . '/common/header.php';
                 <?php endif; ?>
             </div>
             
-            <form method="POST" action="index.php" enctype="multipart/form-data">
+            <form method="POST" action="index.php" id="video_submit_form">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
                 <input type="hidden" name="action" value="save_video">
                 <?php if ($edit_video): ?>
                     <input type="hidden" name="video_id" value="<?= $edit_video['id'] ?>">
@@ -278,13 +311,18 @@ require_once __DIR__ . '/common/header.php';
                                     <span class="bg-gray-700 text-gray-300 text-xs px-2 py-1 rounded">Hidden</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="px-4 py-3 text-right">
+                            <td class="px-4 py-3 text-right whitespace-nowrap">
                                 <a href="index.php?edit=<?= $v['id'] ?>#video-form" class="text-blue-400 hover:text-blue-300 px-2 py-1 inline-block transition">
                                     <i class="fa-solid fa-pen"></i>
                                 </a>
-                                <a href="index.php?delete_video=<?= $v['id'] ?>" onclick="return confirm('Are you sure you want to delete this video?');" class="text-red-400 hover:text-red-300 px-2 py-1 inline-block transition">
-                                    <i class="fa-solid fa-trash"></i>
-                                </a>
+                                <form method="POST" action="index.php" class="inline-block m-0 p-0" onsubmit="return confirm('Are you sure you want to delete this video?');">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                                    <input type="hidden" name="action" value="delete_video">
+                                    <input type="hidden" name="delete_id" value="<?= $v['id'] ?>">
+                                    <button type="submit" class="text-red-400 hover:text-red-300 px-2 py-1 inline-block transition bg-transparent border-none cursor-pointer">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         <?php endwhile; else: ?>
@@ -300,11 +338,18 @@ require_once __DIR__ . '/common/header.php';
 </div>
 
 <script>
-    // Pure JS for toggling UI fields
     function toggleThumbFields() {
         var type = document.getElementById('thumb_type').value;
+        var form = document.getElementById('video_submit_form');
+        
         document.getElementById('thumb_upload_div').style.display = (type === 'upload') ? 'block' : 'none';
         document.getElementById('thumb_url_div').style.display = (type === 'url') ? 'block' : 'none';
+        
+        if (type === 'upload') {
+            form.setAttribute('enctype', 'multipart/form-data');
+        } else {
+            form.removeAttribute('enctype');
+        }
     }
 
     window.onload = function() {
