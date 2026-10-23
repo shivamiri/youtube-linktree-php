@@ -7,6 +7,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title><?= isset($settings['channel_name']) ? htmlspecialchars($settings['channel_name']) : 'SM YouTube Links' ?></title>
+
+    <?php if (defined('GA_MEASUREMENT_ID') && GA_MEASUREMENT_ID !== ''): ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars(GA_MEASUREMENT_ID) ?>"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', '<?= htmlspecialchars(GA_MEASUREMENT_ID) ?>');
+    </script>
+    <?php endif; ?>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
