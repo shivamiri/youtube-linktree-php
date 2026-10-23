@@ -39,8 +39,8 @@ Step-by-step install on free shared hosting (InfinityFree example). Any hosting 
 
 ## Step 4: Create config.php
 
-1. In `htdocs/common/`, make a copy of `config.sample.php` and rename it to `config.php`.
-   (Or: edit `config.sample.php` and use "Save As" `config.php`.)
+1. Upload `config.sample.php` (from the main folder of this repo) into `htdocs/common/`, then rename that copy to `config.php`.
+   
 2. Open `config.php` and fill in your Step 1 database details:
    - `DB_HOST` = MySQL Host Name
    - `DB_USER` = MySQL User Name
